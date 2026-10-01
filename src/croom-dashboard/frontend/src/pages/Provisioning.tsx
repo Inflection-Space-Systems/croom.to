@@ -1,16 +1,16 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { provisioningApi } from '../services/api';
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { provisioningApi } from "../services/api";
 
 export default function Provisioning() {
-  const [roomName, setRoomName] = useState('');
-  const [location, setLocation] = useState('');
+  const [roomName, setRoomName] = useState("");
+  const [location, setLocation] = useState("");
   const [generatedToken, setGeneratedToken] = useState<any>(null);
 
   const queryClient = useQueryClient();
 
   const { data: pending } = useQuery({
-    queryKey: ['pendingEnrollments'],
+    queryKey: ["pendingEnrollments"],
     queryFn: provisioningApi.getPending,
   });
 
@@ -18,16 +18,16 @@ export default function Provisioning() {
     mutationFn: () => provisioningApi.createToken(roomName, location),
     onSuccess: (data) => {
       setGeneratedToken(data);
-      setRoomName('');
-      setLocation('');
-      queryClient.invalidateQueries({ queryKey: ['pendingEnrollments'] });
+      setRoomName("");
+      setLocation("");
+      queryClient.invalidateQueries({ queryKey: ["pendingEnrollments"] });
     },
   });
 
   const cancelEnrollment = useMutation({
     mutationFn: provisioningApi.cancelEnrollment,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pendingEnrollments'] });
+      queryClient.invalidateQueries({ queryKey: ["pendingEnrollments"] });
     },
   });
 
@@ -43,7 +43,9 @@ export default function Provisioning() {
         <h2 className="text-lg font-medium mb-4">Create Enrollment Token</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-2">Room Name</label>
+            <label className="block text-sm text-gray-400 mb-2">
+              Room Name
+            </label>
             <input
               type="text"
               value={roomName}
@@ -53,7 +55,9 @@ export default function Provisioning() {
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-2">Location (optional)</label>
+            <label className="block text-sm text-gray-400 mb-2">
+              Location (optional)
+            </label>
             <input
               type="text"
               value={location}
@@ -68,14 +72,21 @@ export default function Provisioning() {
           disabled={!roomName || createToken.isPending}
           className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
         >
-          {createToken.isPending ? 'Creating...' : 'Generate Token'}
+          {createToken.isPending ? "Creating..." : "Generate Token"}
         </button>
       </div>
 
+      {createToken.isError && (
+        <p role="alert">
+          Could not create enrollment token. Administrator access is required.
+        </p>
+      )}
       {/* Generated token display */}
       {generatedToken && (
         <div className="bg-green-900/30 border border-green-500 rounded-lg p-6">
-          <h3 className="text-lg font-medium text-green-400 mb-4">Token Generated!</h3>
+          <h3 className="text-lg font-medium text-green-400 mb-4">
+            Token Generated!
+          </h3>
           <div className="space-y-4">
             <div>
               <label className="text-sm text-gray-400">Enrollment Token</label>
@@ -90,7 +101,8 @@ export default function Provisioning() {
               </div>
             </div>
             <p className="text-sm text-gray-400">
-              Use this token on the device during setup. Expires: {generatedToken.expiresAt}
+              Use this token on the device during setup. Expires:{" "}
+              {generatedToken.expiresAt}
             </p>
           </div>
         </div>

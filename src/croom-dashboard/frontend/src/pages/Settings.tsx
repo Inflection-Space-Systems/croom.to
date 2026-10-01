@@ -1,4 +1,4 @@
-import { useAuthStore } from '../store/auth';
+import { useAuthStore } from "../store/auth";
 
 export default function Settings() {
   const { user } = useAuthStore();
@@ -27,36 +27,6 @@ export default function Settings() {
             <dd className="capitalize">{user?.role}</dd>
           </div>
         </dl>
-        <button className="mt-4 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
-          Change Password
-        </button>
-      </div>
-
-      {/* Dashboard Settings */}
-      <div className="bg-gray-800 rounded-lg p-6">
-        <h2 className="text-lg font-medium mb-4">Dashboard Settings</h2>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p>Auto-refresh</p>
-              <p className="text-sm text-gray-400">Automatically refresh device status</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" className="sr-only peer" defaultChecked />
-              <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p>Notifications</p>
-              <p className="text-sm text-gray-400">Receive alerts for device issues</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" className="sr-only peer" defaultChecked />
-              <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
-        </div>
       </div>
 
       {/* System Info */}

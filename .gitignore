@@ -69,3 +69,6 @@ venv.bak/
 # OS
 .DS_Store
 Thumbs.db
+
+# Dashboard dependencies
+node_modules/

@@ -1,20 +1,40 @@
-import { useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { devicesApi, metricsApi } from '../services/api';
+import { useState } from "react";
+import { useAuthStore } from "../store/auth";
+import { useParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { devicesApi, metricsApi } from "../services/api";
 
 export default function DeviceDetail() {
   const { id } = useParams<{ id: string }>();
+  const client = useQueryClient();
+  const { user } = useAuthStore();
+  const canEdit = user?.role === "admin" || user?.role === "operator";
+  const [name, setName] = useState<string | null>(null);
+  const [location, setLocation] = useState<string | null>(null);
+  const [timezone, setTimezone] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: (room: object) => devicesApi.update(id!, { config: { room } }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["device", id] });
+      client.invalidateQueries({ queryKey: ["devices"] });
+    },
+  });
+  const status = useMutation({
+    mutationFn: () => devicesApi.sendCommand(id!, "get_status"),
+  });
 
   const { data: device, isLoading } = useQuery({
-    queryKey: ['device', id],
+    queryKey: ["device", id],
     queryFn: () => devicesApi.get(id!),
     enabled: !!id,
+    refetchInterval: 10000,
   });
 
   const { data: metrics } = useQuery({
-    queryKey: ['deviceMetrics', id],
+    queryKey: ["deviceMetrics", id],
     queryFn: () => metricsApi.getDeviceMetrics(id!),
     enabled: !!id,
+    refetchInterval: 10000,
   });
 
   if (isLoading) {
@@ -29,7 +49,7 @@ export default function DeviceDetail() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">{device.roomName}</h1>
-        <p className="text-gray-400">{device.location || 'No location set'}</p>
+        <p className="text-gray-400">{device.location || "No location set"}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -63,7 +83,8 @@ export default function DeviceDetail() {
         {/* Capabilities */}
         <div className="bg-gray-800 rounded-lg p-6">
           <h2 className="text-lg font-medium mb-4">Capabilities</h2>
-          {device.capabilities && Object.keys(device.capabilities).length > 0 ? (
+          {device.capabilities &&
+          Object.keys(device.capabilities).length > 0 ? (
             <pre className="text-sm text-gray-300 overflow-auto">
               {JSON.stringify(device.capabilities, null, 2)}
             </pre>
@@ -76,15 +97,75 @@ export default function DeviceDetail() {
         <div className="bg-gray-800 rounded-lg p-6">
           <h2 className="text-lg font-medium mb-4">Actions</h2>
           <div className="space-y-3">
-            <button className="w-full py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
-              Restart Device
+            <button
+              onClick={() => status.mutate()}
+              disabled={
+                !canEdit || status.isPending || device.status !== "online"
+              }
+              className="w-full py-2 bg-blue-600 rounded disabled:opacity-50"
+            >
+              Read Device Status
             </button>
-            <button className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
-              Update Configuration
+            {status.data && (
+              <pre className="text-xs overflow-auto">
+                {JSON.stringify(status.data.data, null, 2)}
+              </pre>
+            )}
+            {status.isError && (
+              <p role="alert">Device status request failed.</p>
+            )}
+            <label className="block">
+              Room name
+              <input
+                className="block w-full bg-gray-700 p-2"
+                value={name ?? device.roomName}
+                onChange={(e) => setName(e.target.value)}
+                disabled={!canEdit}
+              />
+            </label>
+            <label className="block">
+              Location
+              <input
+                className="block w-full bg-gray-700 p-2"
+                value={location ?? device.location ?? ""}
+                onChange={(e) => setLocation(e.target.value)}
+                disabled={!canEdit}
+              />
+            </label>
+            <label className="block">
+              Timezone
+              <input
+                className="block w-full bg-gray-700 p-2"
+                value={timezone ?? device.config?.room?.timezone ?? "UTC"}
+                onChange={(e) => setTimezone(e.target.value)}
+                disabled={!canEdit}
+              />
+            </label>
+            <button
+              onClick={() =>
+                save.mutate({
+                  name: name ?? device.roomName,
+                  location: location ?? device.location ?? "",
+                  timezone: timezone ?? device.config?.room?.timezone ?? "UTC",
+                })
+              }
+              disabled={
+                !canEdit || save.isPending || device.status !== "online"
+              }
+              className="w-full py-2 bg-blue-600 rounded disabled:opacity-50"
+            >
+              {save.isPending
+                ? "Waiting for device…"
+                : "Apply Room Configuration"}
             </button>
-            <button className="w-full py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors">
-              Remove Device
-            </button>
+            {save.isSuccess && (
+              <p role="status">Configuration applied by device.</p>
+            )}
+            {save.isError && (
+              <p role="alert">
+                Configuration was not confirmed. Check the connection and retry.
+              </p>
+            )}
           </div>
         </div>
 
@@ -94,7 +175,10 @@ export default function DeviceDetail() {
           {metrics?.metrics && metrics.metrics.length > 0 ? (
             <div className="space-y-2 max-h-64 overflow-auto">
               {metrics.metrics.slice(0, 10).map((m: any) => (
-                <div key={m.id} className="text-sm border-b border-gray-700 pb-2">
+                <div
+                  key={m.id}
+                  className="text-sm border-b border-gray-700 pb-2"
+                >
                   <span className="text-gray-400">
                     {new Date(m.timestamp).toLocaleTimeString()}
                   </span>
