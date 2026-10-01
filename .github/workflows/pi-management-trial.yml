@@ -1,0 +1,24 @@
+name: Pi management trial
+on:
+  pull_request:
+    paths: ['src/croom/trial_management.py', 'tests/trial/**', 'pyproject.toml', '.github/workflows/pi-management-trial.yml']
+  push:
+    branches: [main]
+    paths: ['src/croom/trial_management.py', 'tests/trial/**', 'pyproject.toml', '.github/workflows/pi-management-trial.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.10', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install aiohttp pyyaml
+      - run: PYTHONPATH=src python -m unittest discover -s tests/trial -v
+      - run: python -m compileall -q src/croom/trial_management.py

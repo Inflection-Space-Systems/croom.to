@@ -61,6 +61,7 @@ dev = [
 
 [project.scripts]
 croom = "croom.core.agent:main"
+croom-trial = "croom.trial_management:main"
 croom-ui = "croom_ui.main:main"
 
 [project.urls]
