@@ -2,17 +2,17 @@
  * Database models using Sequelize.
  */
 
-import { Sequelize, DataTypes, Model, Optional } from 'sequelize';
-import { logger } from '../services/logger';
+import { Sequelize, DataTypes, Model, Optional } from "sequelize";
+import { logger } from "../services/logger";
 
 // Database connection
 const sequelize = new Sequelize({
-  dialect: 'postgres',
-  host: process.env.DB_HOST || 'localhost',
+  dialect: "postgres",
+  host: process.env.DB_HOST || "localhost",
   port: Number(process.env.DB_PORT) || 5432,
-  database: process.env.DB_NAME || 'croom',
-  username: process.env.DB_USER || 'croom',
-  password: process.env.DB_PASSWORD || 'croom',
+  database: process.env.DB_NAME || "croom",
+  username: process.env.DB_USER || "croom",
+  password: process.env.DB_PASSWORD || "croom",
   logging: (msg) => logger.debug(msg),
 });
 
@@ -22,34 +22,45 @@ interface DeviceAttributes {
   name: string;
   roomName: string;
   location: string;
-  status: 'online' | 'offline' | 'error' | 'provisioning';
+  status: "online" | "offline" | "error" | "provisioning";
   platform: string;
   softwareVersion: string;
   lastSeen: Date;
   capabilities: object;
   config: object;
-  enrollmentToken?: string;
+  enrollmentToken?: string | null;
+  enrollmentExpiresAt?: Date | null;
+  deviceKeyHash?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-interface DeviceCreationAttributes extends Optional<DeviceAttributes, 'id' | 'status' | 'lastSeen' | 'capabilities' | 'config'> {}
+interface DeviceCreationAttributes
+  extends Optional<
+    DeviceAttributes,
+    "id" | "status" | "lastSeen" | "capabilities" | "config"
+  > {}
 
 // Device model
-export class Device extends Model<DeviceAttributes, DeviceCreationAttributes> implements DeviceAttributes {
-  public id!: string;
-  public name!: string;
-  public roomName!: string;
-  public location!: string;
-  public status!: 'online' | 'offline' | 'error' | 'provisioning';
-  public platform!: string;
-  public softwareVersion!: string;
-  public lastSeen!: Date;
-  public capabilities!: object;
-  public config!: object;
-  public enrollmentToken?: string;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+export class Device
+  extends Model<DeviceAttributes, DeviceCreationAttributes>
+  implements DeviceAttributes
+{
+  declare id: string;
+  declare name: string;
+  declare roomName: string;
+  declare location: string;
+  declare status: "online" | "offline" | "error" | "provisioning";
+  declare platform: string;
+  declare softwareVersion: string;
+  declare lastSeen: Date;
+  declare capabilities: object;
+  declare config: object;
+  declare enrollmentToken?: string | null;
+  declare enrollmentExpiresAt?: Date | null;
+  declare deviceKeyHash?: string | null;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 }
 
 Device.init(
@@ -72,8 +83,8 @@ Device.init(
       allowNull: true,
     },
     status: {
-      type: DataTypes.ENUM('online', 'offline', 'error', 'provisioning'),
-      defaultValue: 'provisioning',
+      type: DataTypes.ENUM("online", "offline", "error", "provisioning"),
+      defaultValue: "provisioning",
     },
     platform: {
       type: DataTypes.STRING(50),
@@ -95,6 +106,8 @@ Device.init(
       type: DataTypes.JSONB,
       defaultValue: {},
     },
+    enrollmentExpiresAt: { type: DataTypes.DATE, allowNull: true },
+    deviceKeyHash: { type: DataTypes.STRING(64), allowNull: true },
     enrollmentToken: {
       type: DataTypes.STRING(255),
       allowNull: true,
@@ -102,9 +115,9 @@ Device.init(
   },
   {
     sequelize,
-    tableName: 'devices',
+    tableName: "devices",
     timestamps: true,
-  }
+  },
 );
 
 // User attributes
@@ -113,22 +126,26 @@ interface UserAttributes {
   email: string;
   passwordHash: string;
   name: string;
-  role: 'admin' | 'operator' | 'viewer';
+  role: "admin" | "operator" | "viewer";
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'role'> {}
+interface UserCreationAttributes
+  extends Optional<UserAttributes, "id" | "role"> {}
 
 // User model
-export class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
-  public id!: string;
-  public email!: string;
-  public passwordHash!: string;
-  public name!: string;
-  public role!: 'admin' | 'operator' | 'viewer';
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+export class User
+  extends Model<UserAttributes, UserCreationAttributes>
+  implements UserAttributes
+{
+  declare id: string;
+  declare email: string;
+  declare passwordHash: string;
+  declare name: string;
+  declare role: "admin" | "operator" | "viewer";
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 }
 
 User.init(
@@ -152,15 +169,15 @@ User.init(
       allowNull: false,
     },
     role: {
-      type: DataTypes.ENUM('admin', 'operator', 'viewer'),
-      defaultValue: 'viewer',
+      type: DataTypes.ENUM("admin", "operator", "viewer"),
+      defaultValue: "viewer",
     },
   },
   {
     sequelize,
-    tableName: 'users',
+    tableName: "users",
     timestamps: true,
-  }
+  },
 );
 
 // Metrics model
@@ -172,14 +189,17 @@ interface MetricsAttributes {
   data: object;
 }
 
-interface MetricsCreationAttributes extends Optional<MetricsAttributes, 'id'> {}
+interface MetricsCreationAttributes extends Optional<MetricsAttributes, "id"> {}
 
-export class Metrics extends Model<MetricsAttributes, MetricsCreationAttributes> implements MetricsAttributes {
-  public id!: string;
-  public deviceId!: string;
-  public timestamp!: Date;
-  public type!: string;
-  public data!: object;
+export class Metrics
+  extends Model<MetricsAttributes, MetricsCreationAttributes>
+  implements MetricsAttributes
+{
+  declare id: string;
+  declare deviceId: string;
+  declare timestamp: Date;
+  declare type: string;
+  declare data: object;
 }
 
 Metrics.init(
@@ -194,7 +214,7 @@ Metrics.init(
       allowNull: false,
       references: {
         model: Device,
-        key: 'id',
+        key: "id",
       },
     },
     timestamp: {
@@ -212,32 +232,30 @@ Metrics.init(
   },
   {
     sequelize,
-    tableName: 'metrics',
+    tableName: "metrics",
     timestamps: false,
     indexes: [
-      { fields: ['deviceId', 'timestamp'] },
-      { fields: ['type', 'timestamp'] },
+      { fields: ["deviceId", "timestamp"] },
+      { fields: ["type", "timestamp"] },
     ],
-  }
+  },
 );
 
 // Relationships
-Device.hasMany(Metrics, { foreignKey: 'deviceId' });
-Metrics.belongsTo(Device, { foreignKey: 'deviceId' });
+Device.hasMany(Metrics, { foreignKey: "deviceId" });
+Metrics.belongsTo(Device, { foreignKey: "deviceId" });
 
 // Initialize database
 export async function initDatabase(): Promise<void> {
   try {
     await sequelize.authenticate();
-    logger.info('Database connection established');
+    logger.info("Database connection established");
+    // Connections do not survive a server restart. Agents establish status anew.
+    await Device.update({ status: "offline" }, { where: { status: "online" } });
 
-    // Sync models (use migrations in production)
-    if (process.env.NODE_ENV !== 'production') {
-      await sequelize.sync({ alter: true });
-      logger.info('Database synchronized');
-    }
+    // Schema creation is an explicit bootstrap command, never a server side effect.
   } catch (error) {
-    logger.error('Database initialization failed:', error);
+    logger.error("Database initialization failed:", error);
     throw error;
   }
 }

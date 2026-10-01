@@ -1,179 +1,170 @@
-/**
- * Device provisioning routes.
- *
- * Zero-touch provisioning flow:
- * 1. Admin creates enrollment token in dashboard
- * 2. Device boots with token (from QR code or config)
- * 3. Device calls /api/provisioning/enroll with token
- * 4. Dashboard validates token, creates device record
- * 5. Device receives config and connects via WebSocket
- */
-
-import { Router, Request, Response } from 'express';
-import { v4 as uuidv4 } from 'uuid';
-import { Device } from '../models';
-import { authMiddleware, AuthRequest, requireRole } from '../middleware/auth';
-import { logger } from '../services/logger';
+import rateLimit from "express-rate-limit";
+import { Router, Response } from "express";
+import { Device, sequelize } from "../models";
+import { authMiddleware, AuthRequest, requireRole } from "../middleware/auth";
+import { createDeviceKey, hashCredential } from "../services/deviceCredentials";
 
 export const provisioningRouter = Router();
-
-// Generate enrollment token (admin only)
+provisioningRouter.use(
+  rateLimit({
+    windowMs: 60 * 1000,
+    limit: 60,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { error: "Too many requests; try again later" },
+  }),
+);
 provisioningRouter.post(
-  '/token',
+  "/token",
   authMiddleware,
-  requireRole('admin'),
+  requireRole("admin"),
   async (req: AuthRequest, res: Response) => {
-    try {
-      const { roomName, location, expiresInHours = 24 } = req.body;
-
-      if (!roomName) {
-        res.status(400).json({ error: 'Room name required' });
-        return;
-      }
-
-      const token = uuidv4();
-      const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000);
-
-      // Create pending device record
-      const device = await Device.create({
-        name: `device-${token.slice(0, 8)}`,
-        roomName,
-        location: location || '',
-        status: 'provisioning',
-        platform: 'unknown',
-        softwareVersion: 'unknown',
-        enrollmentToken: token,
+    const { roomName, location = "", expiresInHours = 24 } = req.body;
+    if (
+      typeof roomName !== "string" ||
+      !roomName.trim() ||
+      roomName.length > 255 ||
+      typeof location !== "string" ||
+      location.length > 255 ||
+      typeof expiresInHours !== "number" ||
+      !Number.isFinite(expiresInHours) ||
+      expiresInHours <= 0 ||
+      expiresInHours > 168
+    ) {
+      res.status(400).json({
+        error: "Invalid room, location or token lifetime (maximum 168 hours)",
       });
-
-      logger.info(`Enrollment token created for room ${roomName}`);
-
+      return;
+    }
+    try {
+      const token = createDeviceKey();
+      const expiresAt = new Date(Date.now() + expiresInHours * 3600000);
+      const device = await Device.create({
+        name: roomName,
+        roomName,
+        location,
+        status: "provisioning",
+        platform: "unknown",
+        softwareVersion: "unknown",
+        enrollmentToken: hashCredential(token),
+        enrollmentExpiresAt: expiresAt,
+      });
       res.status(201).json({
         token,
         deviceId: device.id,
         roomName,
-        expiresAt: expiresAt.toISOString(),
-        enrollmentUrl: `${process.env.BASE_URL || 'http://localhost:3001'}/api/provisioning/enroll`,
+        expiresAt,
+        enrollmentUrl: `${process.env.BASE_URL || ""}/api/provisioning/enroll`,
       });
-    } catch (error) {
-      logger.error('Error creating enrollment token:', error);
-      res.status(500).json({ error: 'Failed to create token' });
+    } catch {
+      res.status(500).json({ error: "Failed to create token" });
     }
-  }
+  },
 );
 
-// Device enrollment (called by device during setup)
-provisioningRouter.post('/enroll', async (req: Request, res: Response) => {
+provisioningRouter.post("/enroll", async (req, res) => {
+  const { token, deviceInfo = {} } = req.body;
+  if (
+    typeof token !== "string" ||
+    token.length > 256 ||
+    !token ||
+    !deviceInfo ||
+    typeof deviceInfo !== "object"
+  ) {
+    res.status(400).json({ error: "Invalid enrollment request" });
+    return;
+  }
+  for (const key of ["name", "platform", "softwareVersion"]) {
+    if (
+      deviceInfo[key] !== undefined &&
+      (typeof deviceInfo[key] !== "string" ||
+        deviceInfo[key].length > (key === "name" ? 255 : 50))
+    ) {
+      res.status(400).json({ error: "Invalid device information" });
+      return;
+    }
+  }
   try {
-    const { token, deviceInfo } = req.body;
-
-    if (!token) {
-      res.status(400).json({ error: 'Enrollment token required' });
+    // Lock while consuming: two simultaneous enrollments cannot exchange the same token.
+    const result = await sequelize.transaction(async (transaction) => {
+      const device = await Device.findOne({
+        where: { enrollmentToken: hashCredential(token) },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (
+        !device ||
+        device.status !== "provisioning" ||
+        !device.enrollmentExpiresAt ||
+        device.enrollmentExpiresAt.getTime() <= Date.now()
+      )
+        return null;
+      const deviceKey = createDeviceKey();
+      await device.update(
+        {
+          name: deviceInfo.name || device.name,
+          platform: deviceInfo.platform || "unknown",
+          softwareVersion: deviceInfo.softwareVersion || "unknown",
+          capabilities: deviceInfo.capabilities || {},
+          status: "offline",
+          enrollmentToken: null,
+          enrollmentExpiresAt: null,
+          deviceKeyHash: hashCredential(deviceKey),
+        },
+        { transaction },
+      );
+      return { deviceId: device.id, deviceKey, config: device.config };
+    });
+    if (!result) {
+      res.status(401).json({ error: "Invalid or expired enrollment token" });
       return;
     }
-
-    // Find device with token
-    const device = await Device.findOne({
-      where: { enrollmentToken: token },
-    });
-
-    if (!device) {
-      res.status(401).json({ error: 'Invalid enrollment token' });
-      return;
-    }
-
-    if (device.status !== 'provisioning') {
-      res.status(409).json({ error: 'Device already enrolled' });
-      return;
-    }
-
-    // Update device info
-    const {
-      platform = 'rpi5',
-      softwareVersion = '2.0.0',
-      capabilities = {},
-      name,
-    } = deviceInfo || {};
-
-    await device.update({
-      name: name || device.name,
-      platform,
-      softwareVersion,
-      capabilities,
-      status: 'online',
-      enrollmentToken: null, // Clear token after use
-      lastSeen: new Date(),
-    });
-
-    logger.info(`Device ${device.id} enrolled successfully`);
-
-    // Return device config
-    res.json({
-      deviceId: device.id,
-      config: device.config,
-      websocketUrl: `${process.env.WS_URL || 'ws://localhost:3001'}/ws`,
-      message: 'Device enrolled successfully',
-    });
-  } catch (error) {
-    logger.error('Error enrolling device:', error);
-    res.status(500).json({ error: 'Enrollment failed' });
+    res.json(result);
+  } catch {
+    res.status(500).json({ error: "Enrollment failed" });
   }
 });
 
-// Get pending enrollments (admin only)
 provisioningRouter.get(
-  '/pending',
+  "/pending",
   authMiddleware,
-  requireRole('admin'),
-  async (req: AuthRequest, res: Response) => {
+  requireRole("admin"),
+  async (_req, res) => {
     try {
       const devices = await Device.findAll({
-        where: { status: 'provisioning' },
-        order: [['createdAt', 'DESC']],
+        where: { status: "provisioning" },
+        order: [["createdAt", "DESC"]],
       });
-
       res.json({
         pendingDevices: devices.map((d) => ({
           id: d.id,
           roomName: d.roomName,
           location: d.location,
           createdAt: d.createdAt,
-          hasToken: !!d.enrollmentToken,
+          expiresAt: d.enrollmentExpiresAt,
         })),
       });
-    } catch (error) {
-      logger.error('Error getting pending enrollments:', error);
-      res.status(500).json({ error: 'Failed to get pending enrollments' });
+    } catch {
+      res.status(500).json({ error: "Failed to list pending devices" });
     }
-  }
+  },
 );
-
-// Cancel enrollment (admin only)
 provisioningRouter.delete(
-  '/token/:deviceId',
+  "/token/:deviceId",
   authMiddleware,
-  requireRole('admin'),
-  async (req: AuthRequest, res: Response) => {
+  requireRole("admin"),
+  async (req, res) => {
     try {
-      const device = await Device.findByPk(req.params.deviceId);
-
-      if (!device) {
-        res.status(404).json({ error: 'Device not found' });
-        return;
-      }
-
-      if (device.status !== 'provisioning') {
-        res.status(400).json({ error: 'Device already enrolled' });
-        return;
-      }
-
-      await device.destroy();
-
-      logger.info(`Enrollment cancelled for device ${req.params.deviceId}`);
-
-      res.json({ message: 'Enrollment cancelled' });
-    } catch (error) {
-      logger.error('Error cancelling enrollment:', error);
-      res.status(500).json({ error: 'Failed to cancel enrollment' });
+      const removed = await Device.destroy({
+        where: { id: req.params.deviceId, status: "provisioning" },
+      });
+      res.status(removed ? 200 : 404).json({
+        message: removed
+          ? "Enrollment cancelled"
+          : "Pending enrollment not found",
+      });
+    } catch {
+      res.status(400).json({ error: "Invalid device ID" });
     }
-  }
+  },
 );
