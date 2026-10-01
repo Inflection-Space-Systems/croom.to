@@ -3,7 +3,7 @@
 This adds `python -m croom.trial_management` / `croom-trial` as a separate,
 management-only process. It does not start the existing audio, video, AI,
 calendar or meeting services, and does not claim to repair those services.
-It requires the dashboard management-trial API from the companion dashboard PR.
+It requires the [dashboard management-trial API](https://github.com/Inflection-Space-Systems/croom.to/pull/1) and the [Kubernetes preparation](https://github.com/Inflection-Space-Systems/k8s/pull/71).
 
 Supported: one-time enrollment, authenticated WebSocket reconnection, system
 metrics, remote `get_status`, and durable room name/location/timezone overrides.
