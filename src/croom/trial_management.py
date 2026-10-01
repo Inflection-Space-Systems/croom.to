@@ -179,11 +179,11 @@ class TrialManagementAgent:
             }
 
     async def _send_periodic(self, ws):
-        last_metrics = 0.0
+        last_metrics = None
         while not ws.closed:
             await ws.send_json({"type": "heartbeat", "payload": {}})
             now = asyncio.get_running_loop().time()
-            if now - last_metrics >= self.metrics_interval:
+            if last_metrics is None or now - last_metrics >= self.metrics_interval:
                 await ws.send_json(
                     {"type": "metrics", "payload": {"type": "system", "data": self.status()}}
                 )
