@@ -1,7 +1,7 @@
 # Management dashboard trial
 
 This packages the existing React/Express/PostgreSQL dashboard for a single
-management API process. Use the companion `croom.trial_management` agent, not
+management API process. Use the [companion management-only agent PR](https://github.com/Inflection-Space-Systems/croom.to/pull/2) and [Kubernetes preparation PR](https://github.com/Inflection-Space-Systems/k8s/pull/71), not
 upstream's incompatible DashboardClient. The Kubernetes preparation PR routes
 browser/API requests through Authelia and grants only the enrollment and `/ws`
 machine paths direct access to application authentication.
@@ -58,6 +58,13 @@ Start the API with a generated `JWT_SECRET` of at least 32 characters. It fails
 startup without one. Set `BASE_URL` and `CORS_ORIGIN` to the dashboard HTTPS
 origin. The server never synchronizes schema at startup. Bootstrap credentials
 belong only to the one-time/init bootstrap process, not the running API.
+
+The API limits each client to 300 HTTP requests/minute, provisioning to 60/minute,
+and authentication to 20 requests/15 minutes. These single-process memory limits
+reset on restart. Set `TRUST_PROXY_HOPS=1` only when the API is reached through
+exactly one trusted proxy (the private Traefik ingress in the preparation PR).
+Direct local tests leave it unset; do not expose the API Service directly to
+untrusted clients who could forge forwarding headers.
 
 Administrator registration now requires an existing administrator's bearer
 token. Login produces a 24-hour JWT; middleware rechecks the current user's role

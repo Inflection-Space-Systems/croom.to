@@ -1,9 +1,19 @@
+import rateLimit from "express-rate-limit";
 import { Router, Response } from "express";
 import { Device, sequelize } from "../models";
 import { authMiddleware, AuthRequest, requireRole } from "../middleware/auth";
 import { createDeviceKey, hashCredential } from "../services/deviceCredentials";
 
 export const provisioningRouter = Router();
+provisioningRouter.use(
+  rateLimit({
+    windowMs: 60 * 1000,
+    limit: 60,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { error: "Too many requests; try again later" },
+  }),
+);
 provisioningRouter.post(
   "/token",
   authMiddleware,
@@ -21,11 +31,9 @@ provisioningRouter.post(
       expiresInHours <= 0 ||
       expiresInHours > 168
     ) {
-      res
-        .status(400)
-        .json({
-          error: "Invalid room, location or token lifetime (maximum 168 hours)",
-        });
+      res.status(400).json({
+        error: "Invalid room, location or token lifetime (maximum 168 hours)",
+      });
       return;
     }
     try {
@@ -41,15 +49,13 @@ provisioningRouter.post(
         enrollmentToken: hashCredential(token),
         enrollmentExpiresAt: expiresAt,
       });
-      res
-        .status(201)
-        .json({
-          token,
-          deviceId: device.id,
-          roomName,
-          expiresAt,
-          enrollmentUrl: `${process.env.BASE_URL || ""}/api/provisioning/enroll`,
-        });
+      res.status(201).json({
+        token,
+        deviceId: device.id,
+        roomName,
+        expiresAt,
+        enrollmentUrl: `${process.env.BASE_URL || ""}/api/provisioning/enroll`,
+      });
     } catch {
       res.status(500).json({ error: "Failed to create token" });
     }
@@ -152,13 +158,11 @@ provisioningRouter.delete(
       const removed = await Device.destroy({
         where: { id: req.params.deviceId, status: "provisioning" },
       });
-      res
-        .status(removed ? 200 : 404)
-        .json({
-          message: removed
-            ? "Enrollment cancelled"
-            : "Pending enrollment not found",
-        });
+      res.status(removed ? 200 : 404).json({
+        message: removed
+          ? "Enrollment cancelled"
+          : "Pending enrollment not found",
+      });
     } catch {
       res.status(400).json({ error: "Invalid device ID" });
     }

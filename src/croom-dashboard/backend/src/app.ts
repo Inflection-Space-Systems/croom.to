@@ -1,3 +1,4 @@
+import rateLimit from "express-rate-limit";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -17,6 +18,16 @@ export function createDashboardServer() {
   const app = express();
   const server = createServer(app);
   const gateway = new WebSocketServer(server);
+  app.set("trust proxy", process.env.TRUST_PROXY_HOPS === "1" ? 1 : false);
+  app.use(
+    rateLimit({
+      windowMs: 60 * 1000,
+      limit: 300,
+      standardHeaders: "draft-8",
+      legacyHeaders: false,
+      message: { error: "Too many requests; try again later" },
+    }),
+  );
   app.use(helmet());
   app.use(cors({ origin: process.env.CORS_ORIGIN || false }));
   app.use(compression());

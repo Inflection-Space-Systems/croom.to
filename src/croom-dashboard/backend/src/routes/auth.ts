@@ -1,3 +1,4 @@
+import rateLimit from "express-rate-limit";
 /**
  * Authentication routes.
  */
@@ -14,6 +15,15 @@ import {
 import { logger } from "../services/logger";
 
 export const authRouter = Router();
+authRouter.use(
+  rateLimit({
+    windowMs: 900 * 1000,
+    limit: 20,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { error: "Too many requests; try again later" },
+  }),
+);
 
 // Login
 authRouter.post("/login", async (req: Request, res: Response) => {
@@ -93,11 +103,9 @@ authRouter.post(
         Buffer.byteLength(password) > 72 ||
         (role && !["admin", "operator", "viewer"].includes(role))
       ) {
-        res
-          .status(400)
-          .json({
-            error: "Invalid registration fields; password must be 16–72 bytes",
-          });
+        res.status(400).json({
+          error: "Invalid registration fields; password must be 16–72 bytes",
+        });
         return;
       }
 

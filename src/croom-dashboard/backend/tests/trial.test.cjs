@@ -251,3 +251,17 @@ test("disconnect is visible and config changes to an offline device do not repor
     409,
   );
 });
+
+test("repeated unauthenticated login attempts are rate limited", async () => {
+  let status;
+  for (let i = 0; i < 22; i++) {
+    status = (
+      await request("/api/auth/login", {
+        email: "unknown@example.test",
+        password: "wrong-password",
+      })
+    ).status;
+    if (status === 429) break;
+  }
+  assert.equal(status, 429);
+});
